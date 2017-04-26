@@ -96,7 +96,7 @@ function search(){
 /* ==================================================================================================== */
 	if ($do == 'tag'){
 
-		if (mb_strlen($model->query)<=3 && mb_strlen($model->query)>=1){
+		if (mb_strlen($model->query)<=2 && mb_strlen($model->query)>=1){
 			cmsCore::addSessionMessage($_LANG['EMPTY_QUERY'], 'error');
 			$inCore->redirect('/search');
 		}
@@ -110,7 +110,63 @@ function search(){
 
 		$total   = $model->getCountTags();
 
-		$results = $model->searchByTag();
+		$results_ = $model->searchByTag();
+		foreach($results_ as $item)
+		{
+            if($item['target'] == "blogpost")
+            {
+                $item['extended']['has_comments'] = true;
+                $item['extended']['has_tags'] = true;
+                $item['extended']['show_cover'] = false;
+                
+                $sql = "SELECT cms_blog_posts.*, 
+                        cms_blogs.seolink as b_seolink
+                        FROM cms_blog_posts 
+                        INNER JOIN cms_blogs ON cms_blog_posts.blog_id = cms_blogs.id
+                        WHERE cms_blog_posts.id = ".$item['item_id'];
+                $_result = $inDB->query($sql);
+                $post = $inDB->fetch_assoc($_result);
+                
+                //print_r($post);
+                $item['object'] = $post['title'];
+                
+                $regex      = '/\[(cut=)\s*(.*?)\]/ui';
+                $matches    = array();
+                preg_match_all( $regex, $post['content_html'], $matches, PREG_SET_ORDER );
+                
+                if (is_array($matches)){
+
+                    $elm        = $matches[0];
+                    $elm[0]     = str_replace('[', '', $elm[0]);
+                    $elm[0]     = str_replace(']', '', $elm[0]);
+
+                    mb_parse_str( $elm[0], $args );
+
+                    $cut_title  = $args['cut'];
+
+                    $pages  = preg_split( $regex, $post['content_html'] );
+                    
+                    if ($pages) { $post_content = $is_after ? $pages[1] : $pages[0]; }
+
+                    if ($post_url && !$is_after) {
+                    $post_content .= '<div class="blog_cut_link">
+                                            <a href="'.$post_url.'">'.$cut_title.'</a>
+                                    </div>';
+                    }
+
+                }            
+                
+                preg_match_all('/(\[IMG\])(.*)(\[\/IMG\])/',$post['content'],$covers);
+                
+                $item['extended']['text'] = $post_content;
+                $item['extended']['images'][] = $covers[2][0];
+                $item['extended']['comments_count'] = $post['comments_count'];
+                $item['extended']['hits'] = $post['hits'];
+                $item['object_url'] = "/blogs/".$post['b_seolink']."/".$post['seolink'].".html";
+                $item['item_date'] = cmsCore::dateFormat($post['pubdate']);
+            }
+            $results[] = $item;
+		}
 
 		cmsPage::initTemplate('components', 'com_search_tag')->
                 assign('query', $model->query)->
@@ -126,3 +182,5 @@ function search(){
 	return true;
 
 }
+?>
+
