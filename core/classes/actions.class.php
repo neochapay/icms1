@@ -418,7 +418,85 @@ class cmsActions {
             $action['is_new']   = (bool) (strtotime($action['pubdate']) > strtotime($inUser->logdate));
             $action['user_url'] = cmsUser::getProfileURL($action['user_login']);
             $action['pubdate']  = cmsCore::dateDiffNow($action['pubdate']);
+/*START extended actions*/
+//дополнительные параметры для постов блогов
+        if($action['name'] == 'add_post')
+        {
+            $action['extended']['has_comments'] = true;
+            $action['extended']['has_tags'] = true;
+            $action['extended']['show_cover'] = false;
+            
+            $sql = "SELECT * FROM cms_blog_posts WHERE id = ".$action['object_id'];
+            $_result = $this->inDB->query($sql);
+            $post = $this->inDB->fetch_assoc($_result);
+            
+            
+            $regex      = '/\[(cut=)\s*(.*?)\]/ui';
+            $matches    = array();
+            preg_match_all( $regex, $post['content_html'], $matches, PREG_SET_ORDER );
+            
+            if (is_array($matches)){
 
+                $elm        = $matches[0];
+                $elm[0]     = str_replace('[', '', $elm[0]);
+                $elm[0]     = str_replace(']', '', $elm[0]);
+
+                mb_parse_str( $elm[0], $args );
+
+                $cut_title  = $args['cut'];
+
+                $pages  = preg_split( $regex, $post['content_html'] );
+                
+                if ($pages) { $post_content = $is_after ? $pages[1] : $pages[0]; }
+
+                if ($post_url && !$is_after) {
+                $post_content .= '<div class="blog_cut_link">
+                                        <a href="'.$post_url.'">'.$cut_title.'</a>
+                                </div>';
+                }
+
+            }            
+            
+            preg_match_all('/(\[IMG\])(.*)(\[\/IMG\])/',$post['content'],$covers);
+            
+            $action['extended']['text'] = $post_content;
+            $action['extended']['images'][] = $covers[2][0];
+            $action['extended']['comments_count'] = $post['comments_count'];
+            $action['extended']['hits'] = $post['hits'];
+        }
+//дополнительные поля для добавления фото
+        else if($action['name'] == 'add_user_photo')
+        {
+            $sql = "SELECT * FROM cms_user_photos WHERE id = ".$act['object_id'];
+            $_result = $this->inDB->query($sql);
+            $photo = $this->inDB->fetch_assoc($_result);            
+        
+            $action['extended']['has_comments'] = false;
+            $action['extended']['show_cover'] = true;
+            $action['extended']['text'] = $photo['description'];
+            $action['extended']['images'][] = '/images/users/photos/medium/'.$photo['imageurl'];
+            $action['extended']['hits'] = $photo['hits'];
+        }
+//дополнительные поля для множественного добавления фото
+        else if($action['name'] == "add_user_photo_multi")
+        {
+            $action['object'] = "Добавлено ".$action['object']." фото";
+            $action['object_url'] = $action['target_url'];
+            $action['extended']['has_comments'] = false;
+            $action['extended']['text'] = "<ul class='slider'>".str_replace("/a>","/a></li>",str_replace("<a","<li><a",str_replace("/small","/medium",$action['description'])))."</ul>";
+        }
+        else if($action['name'] == 'add_plant_photo')
+        {
+            preg_match_all('/src=\"(.*)\"/', $action['description'],$images);
+            $action['object'] = "Добавлено новое фото ".$action['object'];
+            $action['extended']['show_cover'] = true;
+            $action['extended']['images'][] = str_replace("small","medium",$images[1][0]);
+        }
+        else
+        {
+    //	    print_r($action);
+        }
+/*END*/
             $actions[] = $action;
 
         }
